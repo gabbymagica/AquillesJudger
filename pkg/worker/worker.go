@@ -75,8 +75,10 @@ func (w *Worker) SetupCustom(containerConfig *container.Config, hostConfig *cont
 }
 
 func (w *Worker) Execute(codigo string, input string, timeout time.Duration) (stdOut string, stdErr string, error error) {
-	if input[len(input)-1] != '\n' {
-		input += "\n"
+	if input != "" {
+		if input[len(input)-1] != '\n' {
+			input += "\n"
+		}
 	}
 
 	w.injectCode(codigo)
@@ -88,7 +90,7 @@ func (w *Worker) Execute(codigo string, input string, timeout time.Duration) (st
 	// cria o container
 	containerID, err := w.client.ContainerCreate(ctx, w.clientConfig, w.hostConfig, nil, nil, "")
 	if err != nil {
-		panic(err)
+		return "", "", err
 	}
 
 	// garante o extermínio do container
@@ -97,7 +99,7 @@ func (w *Worker) Execute(codigo string, input string, timeout time.Duration) (st
 	// incializa o container
 	err = w.client.ContainerStart(ctx, containerID.ID, container.StartOptions{})
 	if err != nil {
-		panic(err)
+		return "", "", err
 	}
 
 	// goroutine pra enviar input pro container
