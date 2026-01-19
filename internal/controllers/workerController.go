@@ -1,9 +1,7 @@
 package controllers
 
 import (
-	dto "IFJudger/internal/api/dto"
 	"IFJudger/internal/services"
-	"encoding/json"
 	"net/http"
 )
 
@@ -17,7 +15,8 @@ func StartWorkerController(workerService *services.WorkerService) (*WorkerContro
 
 // post route
 func (c *WorkerController) HandleExecution(w http.ResponseWriter, r *http.Request) {
-	var requestDTO dto.ExecutionRequest
+	panic("not implemented")
+	/*var requestDTO dto.ExecutionRequest
 
 	err := json.NewDecoder(r.Body).Decode(&requestDTO)
 	if err != nil {
@@ -27,7 +26,7 @@ func (c *WorkerController) HandleExecution(w http.ResponseWriter, r *http.Reques
 
 	defer r.Body.Close()
 
-	token := c.WorkerService.EnqueueJob(requestDTO.Code, requestDTO.Input, requestDTO.WebhookURL)
+	token := c.WorkerService.EnqueueJob(requestDTO.Code, requestDTO.Input)
 
 	executionEnqueuedResponse := dto.ExecutionEnqueuedResponse{
 		Token:   token,
@@ -36,11 +35,12 @@ func (c *WorkerController) HandleExecution(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(executionEnqueuedResponse)
+	json.NewEncoder(w).Encode(executionEnqueuedResponse)*/
 }
 
 func (c *WorkerController) HandleStatus(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
+	panic("not implemented")
+	/*token := r.URL.Query().Get("token")
 
 	jobResult, ok := c.WorkerService.GetResult(token)
 	if !ok {
@@ -58,5 +58,5 @@ func (c *WorkerController) HandleStatus(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(statusResponse)
+	json.NewEncoder(w).Encode(statusResponse)*/
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"sync"
@@ -19,11 +20,13 @@ type WorkerService struct {
 	maxWorkers int             // máximo de workers, dockers rodando
 }
 
+var LanguageNotFound = errors.New("language not found")
+
 func StartWorkerService() (*WorkerService, error) {
 	service := &WorkerService{
-		jobQueue:   make(chan models.Job, 3), // inicializa a queue com 100 channels de jobs
+		jobQueue:   make(chan models.Job, 3), // 3 (todo: tem que vir do .env)
 		results:    sync.Map{},
-		maxWorkers: 3, // máximo de 3 workers fazendo ao mesmo tempo
+		maxWorkers: 3, // 3 (todo: tem que vir do .env)
 	}
 
 	service.startWorkers()
@@ -63,7 +66,7 @@ func (s *WorkerService) processJob(job models.Job, workerID int) {
 	s.updateResult(job.ID, "processing", "", "", "")
 	log.Printf("[Worker %d] 🐳 Executando Docker para Job %s...\n", workerID, job.ID)
 
-	stdout, stderr, err := s.executeWorker(job.Code, job.Input)
+	stdout, stderr, err := s.executeWorker(job)
 	if err != nil {
 		log.Printf("[Worker %d] ❌ Erro no Job %s: %v\n", workerID, job.ID, err)
 		s.updateResult(job.ID, "error", "", "", err.Error())
@@ -73,14 +76,20 @@ func (s *WorkerService) processJob(job models.Job, workerID int) {
 	s.updateResult(job.ID, "success", stdout, stderr, "")
 }
 
-func (s *WorkerService) executeWorker(code, input string) (string, string, error) {
+func (s *WorkerService) executeWorker(job models.Job) (string, string, error) {
 	worker, err := worker.NewWorker()
 	if err != nil {
 		return "", "", err
 	}
 
-	worker.SetupPython(64)
-	stdout, stderr, err := worker.Execute(code, input, 30)
+	switch job.LanguageID {
+	case 1:
+		worker.SetupPython(int64(job.MaximumRamMB))
+	default:
+		return "", "", LanguageNotFound
+	}
+
+	stdout, stderr, err := worker.Execute(job.Code, job.Input, time.Duration(job.TimeLimitSeconds))
 	if err != nil {
 		return stdout, stderr, err
 	}
@@ -133,15 +142,8 @@ func (s *WorkerService) updateResult(token, status, out, errOut, execErr string)
 }
 
 // cria o job, coloca na fila e retorna o token dele
-func (s *WorkerService) EnqueueJob(code, input string, webhookURL string) string {
+func (s *WorkerService) EnqueueJob(job models.Job, webhookURL string) string {
 	jobID := generateToken()
-
-	job := models.Job{
-		ID:         jobID,
-		Code:       code,
-		Input:      input,
-		WebhookURL: webhookURL,
-	}
 
 	s.updateResult(jobID, "queued", "", "", "")
 
@@ -166,4 +168,8 @@ func generateToken() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func tokenToIDLanguage(token string) {
+
 }

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"IFJudger/internal/models"
 	"IFJudger/internal/models/configs"
 )
 
@@ -16,6 +17,6 @@ func StartJudgerService(workerService *WorkerService, configJudger configs.Confi
 	}, nil
 }
 
-func (s *JudgerService) EnqueueJudge(problemID int, languageID int, code string) {
+func (s *JudgerService) EnqueueJudge(problemUseCases models.ProblemUseCasesLimits) {
 
 }

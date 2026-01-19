@@ -11,13 +11,14 @@ func main() {
 		APIURL:             "http://localhost:55555/CasoTeste/problemaInterno",
 		APIKEY:             "token-mega-secreto-que-ninguem-nunca-sabera-#trocarissodepoispraacessardoenv",
 		CACHEDIRECTORY:     "../internal/api/cache",
-		CACHEFILEEXTENSION: "-cases.cache"})
+		CACHEFILEEXTENSION: "-cases"})
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	usecases, err := cacheService.GetUseCases(7)
-	fmt.Println(usecases)
+	limits, url, err := cacheService.GetProblemData("UUIDTeste")
+	fmt.Println(limits)
+	fmt.Println(url)
 	fmt.Println(err)
 
 	/*mux := router.StartRoutes()

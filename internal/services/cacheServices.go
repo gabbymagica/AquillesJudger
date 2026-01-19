@@ -3,113 +3,132 @@ package services
 import (
 	"IFJudger/internal/models"
 	"IFJudger/internal/models/configs"
+	"archive/zip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type CacheService struct {
 	cacheConfig configs.ConfigCache
 }
 
-var ErrCacheMiss = errors.New("cache not found")
-var ErrCacheInvalid = errors.New("invalid cache")
-
 func StartCacheService(cacheConfig configs.ConfigCache) (*CacheService, error) {
+	if err := os.MkdirAll(cacheConfig.CACHEDIRECTORY, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create cache root: %w", err)
+	}
 	return &CacheService{
 		cacheConfig: cacheConfig,
 	}, nil
 }
 
-func (s *CacheService) GetUseCases(problemID int) ([]models.UseCases, error) {
+func (s *CacheService) GetProblemData(problemID string) ([]models.LanguageLimits, string, error) {
+	problemDir := filepath.Join(s.cacheConfig.CACHEDIRECTORY, problemID+"-problem")
 
-	fileName := fmt.Sprintf("%d%s.json", problemID, s.cacheConfig.CACHEFILEEXTENSION)
-	fullPath := filepath.Join(s.cacheConfig.CACHEDIRECTORY, fileName)
-
-	cachedCases, err := s.readCache(fullPath)
-	if err == nil {
-		return cachedCases, nil
+	metaPath := filepath.Join(problemDir, "meta.json")
+	_, err := os.Stat(metaPath)
+	if os.IsNotExist(err) {
+		err = s.downloadAndExtract(problemID, problemDir)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
-	apiCases, bodyBytes, err := s.requestUseCase(problemID)
+	metaFile, err := os.ReadFile(metaPath)
 	if err != nil {
-		return nil, fmt.Errorf("error while trying to obtain useCases: %w", err)
+		return nil, "", fmt.Errorf("failed to read meta.json: %w", err)
 	}
 
-	if err := s.writeCache(fullPath, bodyBytes); err != nil {
-		fmt.Printf("Warning: failed to save cache for %d: %v\n", problemID, err)
+	var limits []models.LanguageLimits
+	if err := json.Unmarshal(metaFile, &limits); err != nil {
+		return nil, "", fmt.Errorf("corrupted meta.json: %w", err)
 	}
 
-	return apiCases, nil
+	return limits, problemDir, nil
 }
 
-func (s *CacheService) writeCache(filePath string, body []byte) error {
-	if err := os.MkdirAll(s.cacheConfig.CACHEDIRECTORY, 0755); err != nil {
-		fmt.Println("Error while trying to make Directory", err)
-		return nil
-	}
+func (s *CacheService) downloadAndExtract(problemID string, problemDir string) error {
+	fmt.Printf("missing cache, downloading data of %s...\n", problemID)
 
-	if err := os.WriteFile(filePath, body, 0644); err != nil {
-		fmt.Println("Error trying to save cache:", err)
-	}
-
-	return nil
-}
-
-func (s *CacheService) requestUseCase(problemID int) ([]models.UseCases, []byte, error) {
-	apiURL := fmt.Sprintf("%s/%d", s.cacheConfig.APIURL, problemID)
-	fmt.Println(apiURL)
+	apiURL := fmt.Sprintf("%s/%s/package", s.cacheConfig.APIURL, problemID)
 
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed at creating request: %w", err)
+		return err
 	}
-
 	req.Header.Set("X-Admin-Token", s.cacheConfig.APIKEY)
-	req.Header.Set("Accept", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("request falhou: %w", err)
+		return fmt.Errorf("request failed: %w", err)
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("API returned status %s", resp.Status)
+		return fmt.Errorf("API returned status %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	tmpZip, err := os.CreateTemp("", "problem-*.zip")
 	if err != nil {
-		return nil, nil, fmt.Errorf("body reading failed: %w", err)
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
+	defer os.Remove(tmpZip.Name())
 
-	fmt.Println(string(body))
-	var container models.ProblemUseCases
-	if err := json.Unmarshal(body, &container); err != nil {
-		return nil, nil, fmt.Errorf("api decodification failed: %w", err)
+	_, err = io.Copy(tmpZip, resp.Body)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
 	}
+	tmpZip.Close()
 
-	return container.UseCases, body, nil
+	return unzip(tmpZip.Name(), problemDir)
 }
 
-func (s *CacheService) readCache(path string) ([]models.UseCases, error) {
-	data, err := os.ReadFile(path)
+func unzip(src, dest string) error {
+	fmt.Println(src, dest)
+	r, err := zip.OpenReader(src)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrCacheMiss
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		fpath := filepath.Join(dest, f.Name)
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal file path: %s", fpath)
 		}
-		return nil, err
-	}
 
-	var container models.ProblemUseCases
-	if err := json.Unmarshal(data, &container); err != nil {
-		return nil, fmt.Errorf("corrupted JSON: %w", err)
-	}
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
+		}
 
-	return container.UseCases, nil
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+
+		_, err = io.Copy(outFile, rc)
+
+		outFile.Close()
+		rc.Close()
+
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
