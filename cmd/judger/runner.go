@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -16,26 +15,7 @@ type Input struct {
 }
 
 func main() {
-	languageCommand := os.Args[1]
-	otherArgs := os.Args[2:]
-
-	file, err := os.ReadFile("inputs.json")
-	if err != nil {
-		panic(err)
-	}
-
-	//fmt.Println(string(file))
-
-	var inputs Input
-	err = json.Unmarshal(file, &inputs)
-	if err != nil {
-		panic(err)
-	}
-
-	//fmt.Println(inputs)
-
-	outputs := run(languageCommand, otherArgs, inputs.Inputs)
-	fmt.Println(outputs)
+	fmt.Println(os.Args)
 }
 
 func run(cmd string, otherArgs, inputs []string) []string {
