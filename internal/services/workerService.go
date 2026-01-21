@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 type WorkerService struct {
@@ -32,11 +35,42 @@ func StartWorkerService(config configs.WorkerServiceConfig, repository *reposito
 		maxWorkers: config.MaxWorkers,
 	}
 
-	service.recoverJobs()
+	service.cleanupStaleWorkspaces()
 
 	service.startWorkers()
 
+	go service.recoverJobs()
+
 	return service, nil
+}
+
+func (s *WorkerService) cleanupStaleWorkspaces() {
+	dir := s.config.ExecutionDirectory
+	log.Printf("[Cleanup] Verificando lixo em %s...\n", dir)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return // Pasta nem existe, tudo bem
+		}
+		log.Printf("[Cleanup] Erro ao ler diretório: %v\n", err)
+		return
+	}
+
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "job-") {
+			fullPath := filepath.Join(dir, e.Name())
+			if err := os.RemoveAll(fullPath); err != nil {
+				log.Printf("[Cleanup] Falha ao remover %s: %v\n", e.Name(), err)
+			} else {
+				count++
+			}
+		}
+	}
+	if count > 0 {
+		log.Printf("[Cleanup] %d pastas temporárias antigas removidas.\n", count)
+	}
 }
 
 func (s *WorkerService) recoverJobs() {
@@ -56,12 +90,8 @@ func (s *WorkerService) recoverJobs() {
 	log.Printf("[Recovery] %d jobs encontrados. Re-enfileirando...\n", len(jobs))
 
 	for _, job := range jobs {
-		select {
-		case s.jobQueue <- job:
-			log.Printf("[Recovery] Job %s recuperado.\n", job.ID)
-		default:
-			log.Printf("[Recovery] ERRO: Fila cheia ao tentar recuperar Job %s. Ignorado.\n", job.ID)
-		}
+		s.jobQueue <- job
+		log.Printf("[Recovery] Job %s recuperado e re-enfileirado.\n", job.ID)
 	}
 }
 
@@ -182,7 +212,7 @@ func (s *WorkerService) EnqueueJob(job models.Job) (string, error) {
 		log.Printf("[API] WARN: Fila cheia! Rejeitando Job %s.\n", jobID)
 
 		s.updateResult(jobID, models.StatusError, models.ExecutionReport{}, "Job Rejected, queue is full")
-		return jobID, fmt.Errorf("server is busy (queue full)")
+		return "", fmt.Errorf("server is busy (queue full)")
 	}
 }
 

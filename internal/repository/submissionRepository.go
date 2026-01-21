@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -29,11 +30,33 @@ func StartSubmissionRepository(db *sql.DB) (*SubmissionRepository, error) {
 
 	_, _ = db.Exec("PRAGMA journal_mode=WAL;")
 	_, _ = db.Exec("PRAGMA synchronous = NORMAL;")
-	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
 
 	return &SubmissionRepository{
 		DB: db,
 	}, nil
+}
+
+func (r *SubmissionRepository) execWithRetry(query string, args ...interface{}) error {
+	const maxRetries = 20
+	const baseDelay = 100 * time.Millisecond
+
+	var err error
+	for i := 0; i < maxRetries; i++ {
+		_, err = r.DB.Exec(query, args...)
+		if err == nil {
+			return nil
+		}
+
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "locked") || strings.Contains(errMsg, "busy") {
+			time.Sleep(baseDelay * time.Duration(i+1))
+			continue
+		}
+
+		return err
+	}
+
+	return fmt.Errorf("falha após %d tentativas (banco travado): %w", maxRetries, err)
 }
 
 func (r *SubmissionRepository) CreateJob(job models.Job) error {
@@ -45,8 +68,7 @@ func (r *SubmissionRepository) CreateJob(job models.Job) error {
 	query := `INSERT INTO submissions (id, status, result_json, error_message, job_data, updated_at) 
               VALUES (?, ?, ?, ?, ?, ?)`
 
-	_, err = r.DB.Exec(query, job.ID, models.StatusQueued, "", "", string(jobDataJSON), time.Now())
-	if err != nil {
+	if err := r.execWithRetry(query, job.ID, models.StatusQueued, "", "", string(jobDataJSON), time.Now()); err != nil {
 		return fmt.Errorf("falha ao criar job inicial: %w", err)
 	}
 
@@ -63,8 +85,7 @@ func (r *SubmissionRepository) UpdateResult(result models.JobResult) error {
               SET status = ?, result_json = ?, error_message = ?, updated_at = ? 
               WHERE id = ?`
 
-	_, err = r.DB.Exec(query, result.Status, string(resultJSON), result.ErrorMessage, time.Now(), result.ID)
-	if err != nil {
+	if err := r.execWithRetry(query, result.Status, string(resultJSON), result.ErrorMessage, time.Now(), result.ID); err != nil {
 		return fmt.Errorf("falha ao atualizar job: %w", err)
 	}
 
