@@ -27,10 +27,10 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		APIUrl:             getEnv("API_URL", "http://localhost:4040/CasoTeste/problemaInterno"),
 		APIKey:             getEnv("API_KEY", "token-mega-secreto-que-ninguem-nunca-sabera-#trocarissodepoispraacessardoenv"),
-		CacheDirectory:     getEnv("CACHE_DIRECTORY", "../internal/api/cache/"),
+		CacheDirectory:     getEnv("CACHE_DIRECTORY", "./internal/api/cache/"),
 		CacheFileExtension: getEnv("CACHE_FILEEXTENSION", "-problem"),
-		ExecutionDirectory: getEnv("EXECUTION_DIRECTORY", "../internal/api/cache/executions"),
-		RunnerBinaryPath:   getEnv("RUNNER_BINARY_PATH", "../internal/api/binaries/runner"),
+		ExecutionDirectory: getEnv("EXECUTION_DIRECTORY", "./internal/api/cache/executions"),
+		RunnerBinaryPath:   getEnv("RUNNER_BINARY_PATH", "./internal/api/binaries/runner"),
 	}
 
 	var err error
