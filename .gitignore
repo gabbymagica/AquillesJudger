@@ -30,6 +30,11 @@ go.work.sum
 # cache standard directory
 internal/api/cache
 
+#database
+.db
+.db-shm
+.db-wal
+
 # Editor/IDE
 # .idea/
 # .vscode/

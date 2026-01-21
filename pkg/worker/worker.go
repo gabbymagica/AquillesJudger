@@ -170,7 +170,6 @@ func (w *Worker) Cleanup() {
 	}
 }
 
-// Executa o container e retorna o relatório local
 func (w *Worker) Execute() (ExecutionReport, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), w.containerTimeout)
 	defer cancel()

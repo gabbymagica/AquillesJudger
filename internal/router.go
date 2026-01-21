@@ -3,12 +3,14 @@ package router
 import (
 	"IFJudger/internal/controllers"
 	"IFJudger/internal/models/configs"
+	"IFJudger/internal/repository"
 	"IFJudger/internal/services"
 	"IFJudger/pkg/config"
+	"database/sql"
 	"net/http"
 )
 
-func StartRoutes(config *config.Config) *http.ServeMux {
+func StartRoutes(config *config.Config, db *sql.DB) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	testController, err := controllers.StartTestController()
@@ -26,13 +28,18 @@ func StartRoutes(config *config.Config) *http.ServeMux {
 		panic(err.Error())
 	}
 
+	submissionRepository, err := repository.StartSubmissionRepository(db)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	workerService, err := services.StartWorkerService(configs.WorkerServiceConfig{
 		ExecutionDirectory: config.ExecutionDirectory,
 		RunnerPath:         config.RunnerBinaryPath,
 		ContainerTimeout:   config.ContainerTimeout,
 		MaxWorkers:         config.MaxWorkers,
 		QueueSize:          config.QueueSize,
-	})
+	}, submissionRepository)
 	if err != nil {
 		panic(err.Error())
 	}

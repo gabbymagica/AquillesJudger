@@ -3,38 +3,66 @@ package services
 import (
 	"IFJudger/internal/models"
 	"IFJudger/internal/models/configs"
+	"IFJudger/internal/repository"
 	"IFJudger/pkg/worker"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
-	"sync"
 )
 
 type WorkerService struct {
-	config configs.WorkerServiceConfig
+	repository *repository.SubmissionRepository
+	config     configs.WorkerServiceConfig
 
 	jobQueue   chan models.Job
-	results    sync.Map
 	maxWorkers int
 }
 
 var LanguageNotFound = errors.New("language not found")
 
-func StartWorkerService(config configs.WorkerServiceConfig) (*WorkerService, error) {
+func StartWorkerService(config configs.WorkerServiceConfig, repository *repository.SubmissionRepository) (*WorkerService, error) {
 	log.Printf("[Init] Iniciando WorkerService com %d workers e fila de tamanho %d\n", config.MaxWorkers, config.QueueSize)
 
 	service := &WorkerService{
+		repository: repository,
 		config:     config,
 		jobQueue:   make(chan models.Job, config.QueueSize),
-		results:    sync.Map{},
 		maxWorkers: config.MaxWorkers,
 	}
+
+	service.recoverJobs()
 
 	service.startWorkers()
 
 	return service, nil
+}
+
+func (s *WorkerService) recoverJobs() {
+	log.Println("[Recovery] Verificando jobs pendentes no banco...")
+
+	jobs, err := s.repository.GetRecoverableJobs()
+	if err != nil {
+		log.Printf("[Recovery] Erro ao buscar jobs: %v\n", err)
+		return
+	}
+
+	if len(jobs) == 0 {
+		log.Println("[Recovery] Nenhum job pendente encontrado.")
+		return
+	}
+
+	log.Printf("[Recovery] %d jobs encontrados. Re-enfileirando...\n", len(jobs))
+
+	for _, job := range jobs {
+		select {
+		case s.jobQueue <- job:
+			log.Printf("[Recovery] Job %s recuperado.\n", job.ID)
+		default:
+			log.Printf("[Recovery] ERRO: Fila cheia ao tentar recuperar Job %s. Ignorado.\n", job.ID)
+		}
+	}
 }
 
 func (s *WorkerService) startWorkers() {
@@ -140,15 +168,21 @@ func (s *WorkerService) EnqueueJob(job models.Job) (string, error) {
 
 	log.Printf("[API] Tentando enfileirar Job %s...\n", jobID)
 
+	if err := s.repository.CreateJob(job); err != nil {
+		log.Printf("[API] ERRO CRÍTICO: Falha ao salvar job no banco: %v\n", err)
+		return "", fmt.Errorf("database error")
+	}
+
 	select {
 	case s.jobQueue <- job:
 		log.Printf("[API] Job %s entrou na fila.\n", jobID)
-		s.updateResult(jobID, models.StatusQueued, models.ExecutionReport{}, "")
 		return jobID, nil
 
 	default:
 		log.Printf("[API] WARN: Fila cheia! Rejeitando Job %s.\n", jobID)
-		return "", fmt.Errorf("server is busy (queue full)")
+
+		s.updateResult(jobID, models.StatusError, models.ExecutionReport{}, "Job Rejected, queue is full")
+		return jobID, fmt.Errorf("server is busy (queue full)")
 	}
 }
 
@@ -159,18 +193,22 @@ func generateToken() string {
 }
 
 func (s *WorkerService) updateResult(token, status string, result models.ExecutionReport, err string) {
-	s.results.Store(token, models.JobResult{
+	dbErr := s.repository.UpdateResult(models.JobResult{
 		ID:           token,
 		Status:       status,
 		Result:       result,
 		ErrorMessage: err,
 	})
+
+	if dbErr != nil {
+		log.Printf("[ERROR] Falha ao atualizar job %s no banco: %v", token, dbErr)
+	}
 }
 
 func (s *WorkerService) GetResult(token string) (models.JobResult, bool) {
-	result, ok := s.results.Load(token)
-	if !ok {
+	result, err := s.repository.GetByID(token)
+	if err != nil {
 		return models.JobResult{}, false
 	}
-	return result.(models.JobResult), true
+	return result, true
 }

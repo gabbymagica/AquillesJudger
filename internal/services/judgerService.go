@@ -45,7 +45,7 @@ func (s *JudgerService) EnqueueJudge(judgeRequest dto.JudgeRequest) (string, err
 
 	id, err := s.workerService.EnqueueJob(job)
 	if err != nil {
-		return "", nil
+		return id, err
 	}
 	return id, nil
 }

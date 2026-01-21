@@ -55,13 +55,11 @@ func (s *CacheService) downloadAndExtract(problemID string, problemDir string) e
 
 	apiURL := fmt.Sprintf("%s/%s/package", s.cacheConfig.APIURL, problemID)
 
-	fmt.Println(apiURL)
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("X-Admin-Token", s.cacheConfig.APIKEY)
-	fmt.Println(req.Header)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
