@@ -1,26 +1,17 @@
 package main
 
 import (
-	"IFJudger/internal/models/configs"
-	"IFJudger/internal/services"
-	"fmt"
+	router "IFJudger/internal"
+	"IFJudger/pkg/config"
+	"net/http"
 )
 
 func main() {
-	cacheService, err := services.StartCacheService(configs.ConfigCache{
-		APIURL:             "http://localhost:55555/CasoTeste/problemaInterno",
-		APIKEY:             "token-mega-secreto-que-ninguem-nunca-sabera-#trocarissodepoispraacessardoenv",
-		CACHEDIRECTORY:     "../internal/api/cache",
-		CACHEFILEEXTENSION: "-cases"})
+	envConfigs, err := config.LoadConfig()
 	if err != nil {
-		fmt.Println(err)
+		panic(err.Error())
 	}
 
-	limits, url, err := cacheService.GetProblemData("UUIDTeste")
-	fmt.Println(limits)
-	fmt.Println(url)
-	fmt.Println(err)
-
-	/*mux := router.StartRoutes()
-	http.ListenAndServe(":8080", mux)*/
+	mux := router.StartRoutes(envConfigs)
+	http.ListenAndServe(":8080", mux)
 }

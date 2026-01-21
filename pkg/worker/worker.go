@@ -2,7 +2,9 @@ package worker
 
 import (
 	folderutils "IFJudger/pkg/folder_utils"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 type LanguageID int
@@ -17,6 +20,17 @@ type LanguageID int
 const (
 	Python LanguageID = 1
 )
+
+type ExecutionReport struct {
+	Results []TestCaseResult `json:"results"`
+}
+
+type TestCaseResult struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	TimeMS  int64  `json:"time_ms"`
+	Message string `json:"message,omitempty"`
+}
 
 var LanguageImages = map[LanguageID]string{
 	Python: "python:3.12.12-slim",
@@ -50,8 +64,6 @@ type Worker struct {
 }
 
 func NewWorker(config WorkerConfigData) (*Worker, error) {
-	// inicia o client worker
-
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return nil, err
@@ -66,28 +78,22 @@ func NewWorker(config WorkerConfigData) (*Worker, error) {
 	}, nil
 }
 
-// prepara o ambiente de execução, com os arquivos de .in e .out e meta.json
-
 type DockerWorkspaceConfig struct {
 	CachePath          string
 	ExecutionDirectory string
 	RunnerPath         string
-	sourceCode         string
 }
 
 func (w *Worker) PrepareWorkspace(config DockerWorkspaceConfig) error {
-	// garante que existe a pasta de execução
 	if err := os.MkdirAll(config.ExecutionDirectory, 0755); err != nil {
 		return err
 	}
 
-	// faz a pasta temporária
 	tempPath, err := os.MkdirTemp(config.ExecutionDirectory, "job-*")
 	if err != nil {
 		return err
 	}
 
-	// pega caminho absoluto
 	absPath, err := filepath.Abs(tempPath)
 	if err != nil {
 		os.RemoveAll(tempPath)
@@ -95,14 +101,12 @@ func (w *Worker) PrepareWorkspace(config DockerWorkspaceConfig) error {
 	}
 	w.dataPath = absPath
 
-	// copia os conteúdos da pasta de cache
 	err = folderutils.CopyDir(config.CachePath, w.dataPath)
 	if err != nil {
 		w.Cleanup()
 		return err
 	}
 
-	// copia o binário do runner
 	if err := prepareRunnerBinary(config.RunnerPath, w.dataPath); err != nil {
 		w.Cleanup()
 		return err
@@ -119,7 +123,6 @@ func prepareRunnerBinary(sourcePath, destDir string) error {
 
 	destPath := filepath.Join(destDir, "runner")
 
-	// garante as permissões de execução
 	if err := os.WriteFile(destPath, data, 0755); err != nil {
 		return fmt.Errorf("failed to write executable runner: %w", err)
 	}
@@ -139,7 +142,7 @@ func (w *Worker) SetupPython(sourceCode string) error {
 
 	w.clientConfig = &container.Config{
 		Image:      "python:3.12.12-slim",
-		Cmd:        []string{"./runner", "python", "source.py"},
+		Cmd:        []string{"./runner", "python", "source.py", fmt.Sprintf("--testTimeout=%d", w.testTimeout)},
 		WorkingDir: "/app",
 	}
 
@@ -167,44 +170,64 @@ func (w *Worker) Cleanup() {
 	}
 }
 
-func (w *Worker) Execute() (string, error) {
+// Executa o container e retorna o relatório local
+func (w *Worker) Execute() (ExecutionReport, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), w.containerTimeout)
 	defer cancel()
 
 	containerID, err := w.client.ContainerCreate(ctx, w.clientConfig, w.hostConfig, nil, nil, "")
 	if err != nil {
-		return "", err
+		return ExecutionReport{}, err
 	}
 	defer w.client.ContainerRemove(context.Background(), containerID.ID, container.RemoveOptions{Force: true})
 
 	err = w.client.ContainerStart(ctx, containerID.ID, container.StartOptions{})
 	if err != nil {
-		return "", err
+		return ExecutionReport{}, err
 	}
 
 	statusCh, errCh := w.client.ContainerWait(ctx, containerID.ID, container.WaitConditionNotRunning)
 
 	select {
 	case err := <-errCh:
-		// canal de erro -> erro
 		if err != nil {
-			return "", err
+			return ExecutionReport{}, err
 		}
 
 	case <-statusCh:
-		// terminou o container com sucesso
 		break
 
 	case <-ctx.Done():
-		// timeout, contexto de timeout finalizado
-		return "", fmt.Errorf("Timeout do Container excedido.")
+		return ExecutionReport{}, fmt.Errorf("Timeout do Container excedido.")
 	}
 
 	resultPath := filepath.Join(w.dataPath, "result.json")
 	content, err := os.ReadFile(resultPath)
 	if err != nil {
-		return "", fmt.Errorf("falha ao ler result.json (runner crashou?): %w", err)
+		out, errLogs := w.client.ContainerLogs(context.Background(), containerID.ID, container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+		})
+
+		if errLogs == nil {
+			var stdoutBuf, stderrBuf bytes.Buffer
+			stdcopy.StdCopy(&stdoutBuf, &stderrBuf, out)
+
+			return ExecutionReport{}, fmt.Errorf(
+				"result.json not found. Container Logs:\nSTDOUT: %s\nSTDERR: %s\nOriginal Error: %w",
+				stdoutBuf.String(),
+				stderrBuf.String(),
+				err,
+			)
+		}
+
+		return ExecutionReport{}, fmt.Errorf("falha ao ler result.json (runner crashou?): %w", err)
 	}
 
-	return string(content), nil
+	var executionReport ExecutionReport
+	if err := json.Unmarshal(content, &executionReport); err != nil {
+		return ExecutionReport{}, err
+	}
+
+	return executionReport, nil
 }

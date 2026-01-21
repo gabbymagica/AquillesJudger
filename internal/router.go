@@ -2,33 +2,54 @@ package router
 
 import (
 	"IFJudger/internal/controllers"
+	"IFJudger/internal/models/configs"
 	"IFJudger/internal/services"
-	"fmt"
+	"IFJudger/pkg/config"
 	"net/http"
 )
 
-func StartRoutes() *http.ServeMux {
+func StartRoutes(config *config.Config) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	testController, err := controllers.StartTestController()
 	if err != nil {
-		fmt.Println(err.Error())
+		panic(err.Error())
 	}
 
-	// inicializa os serviços
-	workerServices, err := services.StartWorkerService()
+	cacheService, err := services.StartCacheService(configs.ConfigCache{
+		APIURL:             config.APIUrl,
+		APIKEY:             config.APIKey,
+		CACHEDIRECTORY:     config.CacheDirectory,
+		CACHEFILEEXTENSION: config.CacheFileExtension,
+	})
 	if err != nil {
-		fmt.Println(err.Error())
+		panic(err.Error())
 	}
 
-	workerController, err := controllers.StartWorkerController(workerServices)
+	workerService, err := services.StartWorkerService(configs.WorkerServiceConfig{
+		ExecutionDirectory: config.ExecutionDirectory,
+		RunnerPath:         config.RunnerBinaryPath,
+		ContainerTimeout:   config.ContainerTimeout,
+		MaxWorkers:         config.MaxWorkers,
+		QueueSize:          config.QueueSize,
+	})
 	if err != nil {
-		panic(err)
+		panic(err.Error())
+	}
+
+	judgerService, err := services.StartJudgerService(workerService, cacheService)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	judgerController, err := controllers.StartJudgerController(judgerService)
+	if err != nil {
+		panic(err.Error())
 	}
 
 	mux.HandleFunc("GET /test", testController.GetTest)
-	mux.HandleFunc("POST /worker", workerController.HandleExecution)
-	mux.HandleFunc("GET /worker", workerController.HandleStatus)
+	mux.HandleFunc("POST /judger", judgerController.HandleSubmission)
+	mux.HandleFunc("GET /worker", judgerController.HandleStatus)
 
 	return mux
 }

@@ -1,19 +1,22 @@
 package models
 
+import (
+	"time"
+)
+
 type Job struct {
-	ID               string
-	Code             string
-	Input            string
-	LanguageID       int
-	TimeLimitSeconds int
-	MaximumRamMB     int
-	WebhookURL       string
+	ID           string
+	LanguageID   LanguageID
+	CachePath    string
+	TimeLimit    time.Duration
+	MaximumRamMB int
+	Code         string
+	WebhookURL   string
 }
 
 type JobResult struct {
-	ID     string
-	Status string // "queued", "processing", "success", "error"
-	Stdout string
-	Stderr string
-	Error  string
+	ID           string
+	Status       string
+	Result       ExecutionReport
+	ErrorMessage string
 }

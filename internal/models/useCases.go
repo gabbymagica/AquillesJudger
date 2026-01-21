@@ -12,7 +12,7 @@ type UseCases struct {
 }
 
 type LanguageLimits struct {
-	Name             string `json:"nome"`
-	MaximumRamMB     int    `json:"ramMaximoEmMb"`
-	TimeLimitSeconds int    `json:"tempoMaximoEmSegundos"`
+	Name             string `json:"language"`
+	MaximumRamMB     int    `json:"memory_limit"`
+	TimeLimitSeconds int    `json:"time_limit"`
 }

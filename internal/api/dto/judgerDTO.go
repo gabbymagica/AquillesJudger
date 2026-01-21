@@ -1,7 +1,7 @@
 package dto
 
 type JudgeRequest struct {
-	ProblemID  int    `json:"problem_id"`
-	LanguageID int    `json:"language_id"`
-	Code       string `json:"code"`
+	ProblemID     string `json:"problem_id"`
+	LanguageToken string `json:"language_token"`
+	Code          string `json:"code"`
 }
