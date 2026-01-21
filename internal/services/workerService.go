@@ -5,11 +5,14 @@ import (
 	"IFJudger/internal/models/configs"
 	"IFJudger/internal/repository"
 	"IFJudger/pkg/worker"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +20,8 @@ import (
 
 type WorkerService struct {
 	repository *repository.SubmissionRepository
-	config     configs.WorkerServiceConfig
+
+	config configs.WorkerServiceConfig
 
 	jobQueue   chan models.Job
 	maxWorkers int
@@ -51,7 +55,7 @@ func (s *WorkerService) cleanupStaleWorkspaces() {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return // Pasta nem existe, tudo bem
+			return
 		}
 		log.Printf("[Cleanup] Erro ao ler diretório: %v\n", err)
 		return
@@ -129,6 +133,9 @@ func (s *WorkerService) processJob(job models.Job, workerID int) {
 
 	log.Printf("[Worker-%d] SUCESSO no Job %s\n", workerID, job.ID)
 	s.updateResult(job.ID, models.StatusSuccess, result, "")
+
+	jobResult, _ := s.GetResult(job.ID)
+	go s.sendCallback(&jobResult)
 }
 
 func (s *WorkerService) executeWorker(job models.Job, workerID int) (models.ExecutionReport, error) {
@@ -241,4 +248,20 @@ func (s *WorkerService) GetResult(token string) (models.JobResult, bool) {
 		return models.JobResult{}, false
 	}
 	return result, true
+}
+
+func (s *WorkerService) sendCallback(result *models.JobResult) {
+	jsonData, err := json.Marshal(result)
+	if err != nil {
+		fmt.Printf("Erro ao serializar: %v\n", err)
+		return
+	}
+
+	resp, err := http.Post(s.config.CallbackUrl, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("Erro na requisição: %v\n", err)
+		return
+	}
+
+	defer resp.Body.Close()
 }

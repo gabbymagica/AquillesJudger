@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	APIUrl             string
+	CallbackUrl        string
 	APIKey             string
 	CacheDirectory     string
 	CacheFileExtension string
@@ -26,6 +27,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg := &Config{
 		APIUrl:             getEnv("API_URL", "http://localhost:4040/CasoTeste/problemaInterno"),
+		CallbackUrl:        getEnv("API_CALLBACK_URL", "http://localhost:4040/api/callbacks/judger"),
 		APIKey:             getEnv("API_KEY", "token-mega-secreto-que-ninguem-nunca-sabera-#trocarissodepoispraacessardoenv"),
 		CacheDirectory:     getEnv("CACHE_DIRECTORY", "./internal/api/cache/"),
 		CacheFileExtension: getEnv("CACHE_FILEEXTENSION", "-problem"),

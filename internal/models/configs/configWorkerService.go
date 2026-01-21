@@ -4,6 +4,7 @@ import "time"
 
 type WorkerServiceConfig struct {
 	ExecutionDirectory string
+	CallbackUrl        string
 	RunnerPath         string
 	ContainerTimeout   time.Duration
 	MaxWorkers         int

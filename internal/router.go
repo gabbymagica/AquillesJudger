@@ -35,6 +35,7 @@ func StartRoutes(config *config.Config, db *sql.DB) *http.ServeMux {
 
 	workerService, err := services.StartWorkerService(configs.WorkerServiceConfig{
 		ExecutionDirectory: config.ExecutionDirectory,
+		CallbackUrl:        config.CallbackUrl,
 		RunnerPath:         config.RunnerBinaryPath,
 		ContainerTimeout:   config.ContainerTimeout,
 		MaxWorkers:         config.MaxWorkers,
@@ -55,8 +56,8 @@ func StartRoutes(config *config.Config, db *sql.DB) *http.ServeMux {
 	}
 
 	mux.HandleFunc("GET /test", testController.GetTest)
-	mux.HandleFunc("POST /judger", judgerController.HandleSubmission)
-	mux.HandleFunc("GET /worker", judgerController.HandleStatus)
+	mux.HandleFunc("POST /submit", judgerController.HandleSubmission)
+	mux.HandleFunc("GET /job", judgerController.HandleStatus)
 
 	return mux
 }
