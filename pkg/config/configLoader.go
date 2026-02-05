@@ -17,6 +17,7 @@ type Config struct {
 	CacheFileExtension string
 	ExecutionDirectory string
 	RunnerBinaryPath   string
+	OnlyLocalCache     bool
 	ContainerTimeout   time.Duration
 	MaxWorkers         int
 	QueueSize          int
@@ -33,6 +34,7 @@ func LoadConfig() (*Config, error) {
 		CacheFileExtension: getEnv("CACHE_FILEEXTENSION", "-problem"),
 		ExecutionDirectory: getEnv("EXECUTION_DIRECTORY", "./internal/api/cache/executions"),
 		RunnerBinaryPath:   getEnv("RUNNER_BINARY_PATH", "./internal/api/binaries/runner"),
+		OnlyLocalCache:     getEnv("ONLY_LOCAL_CACHE", "false") == "true",
 	}
 
 	var err error

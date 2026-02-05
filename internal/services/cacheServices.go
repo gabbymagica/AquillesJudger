@@ -26,11 +26,15 @@ func StartCacheService(cacheConfig configs.ConfigCache) (*CacheService, error) {
 }
 
 func (s *CacheService) GetProblemData(problemID string) ([]models.LanguageLimits, string, error) {
-	problemDir := filepath.Join(s.cacheConfig.CACHEDIRECTORY, problemID+"-problem")
+	problemDir := filepath.Join(s.cacheConfig.CACHEDIRECTORY, problemID+s.cacheConfig.CACHEFILEEXTENSION)
 
 	metaPath := filepath.Join(problemDir, "meta.json")
 	_, err := os.Stat(metaPath)
 	if os.IsNotExist(err) {
+		if s.cacheConfig.ONLYLOCAL {
+			return nil, "", fmt.Errorf("problem %s not found in local cache", problemID)
+		}
+
 		err = s.downloadAndExtract(problemID, problemDir)
 		if err != nil {
 			return nil, "", err
