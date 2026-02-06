@@ -8,19 +8,13 @@
 *.so
 *.dylib
 
-# Test binary, built with `go test -c`
 *.test
 
-# Code coverage profiles and other test artifacts
 *.out
 coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
 go.work
 go.work.sum
 
@@ -31,10 +25,10 @@ go.work.sum
 internal/api/cache
 
 #database
-.db
-.db-shm
-.db-wal
+*.db
+*.db-shm
+*.db-wal
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/

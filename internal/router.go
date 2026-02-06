@@ -19,6 +19,7 @@ func StartRoutes(config *config.Config, db *sql.DB) *http.ServeMux {
 	}
 
 	cacheService, err := services.StartCacheService(configs.ConfigCache{
+		ONLYLOCAL:          config.OnlyLocalCache,
 		APIURL:             config.APIUrl,
 		APIKEY:             config.APIKey,
 		CACHEDIRECTORY:     config.CacheDirectory,

@@ -18,7 +18,11 @@ type Config struct {
 	CacheFileExtension string
 	ExecutionDirectory string
 	RunnerBinaryPath   string
+<<<<<<< HEAD
 	DatabasePath       string
+=======
+	OnlyLocalCache     bool
+>>>>>>> 478b3ab821c2dbd4891f3a3ff245f4f8f5d34585
 	ContainerTimeout   time.Duration
 	MaxWorkers         int
 	QueueSize          int
