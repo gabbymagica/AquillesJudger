@@ -16,7 +16,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	db, err := sql.Open("sqlite", "judger.db")
+	db, err := sql.Open("sqlite", envConfigs.DatabasePath)
 	if err != nil {
 		log.Fatal(err)
 	}

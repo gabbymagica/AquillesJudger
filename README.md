@@ -1,1 +1,0 @@
-ainda farei..

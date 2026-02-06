@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -17,6 +18,7 @@ type Config struct {
 	CacheFileExtension string
 	ExecutionDirectory string
 	RunnerBinaryPath   string
+	DatabasePath       string
 	ContainerTimeout   time.Duration
 	MaxWorkers         int
 	QueueSize          int
@@ -25,14 +27,22 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
+	// Obtém o diretório do executável para caminhos relativos
+	execPath, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("erro ao obter caminho do executável: %w", err)
+	}
+	baseDir := filepath.Dir(execPath)
+
 	cfg := &Config{
 		APIUrl:             getEnv("API_URL", "http://localhost:4040/CasoTeste/problemaInterno"),
 		CallbackUrl:        getEnv("API_CALLBACK_URL", "http://localhost:4040/api/callbacks/judger"),
 		APIKey:             getEnv("API_KEY", "token-mega-secreto-que-ninguem-nunca-sabera-#trocarissodepoispraacessardoenv"),
-		CacheDirectory:     getEnv("CACHE_DIRECTORY", "./internal/api/cache/"),
+		CacheDirectory:     getEnvPath("CACHE_DIRECTORY", baseDir, "internal/api/cache"),
 		CacheFileExtension: getEnv("CACHE_FILEEXTENSION", "-problem"),
-		ExecutionDirectory: getEnv("EXECUTION_DIRECTORY", "./internal/api/cache/executions"),
-		RunnerBinaryPath:   getEnv("RUNNER_BINARY_PATH", "./internal/api/binaries/runner"),
+		ExecutionDirectory: getEnvPath("EXECUTION_DIRECTORY", baseDir, "internal/api/cache/executions"),
+		RunnerBinaryPath:   getEnvPath("RUNNER_BINARY_PATH", baseDir, "internal/api/binaries/runner"),
+		DatabasePath:       getEnvPath("DATABASE_PATH", baseDir, "judger.db"),
 	}
 
 	var err error
@@ -61,4 +71,14 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// getEnvPath obtém uma variável de ambiente ou retorna um caminho relativo ao baseDir
+func getEnvPath(key, baseDir, relativePath string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		// Se a variável de ambiente estiver definida, usa ela
+		return value
+	}
+	// Caso contrário, constrói o caminho relativo ao executável
+	return filepath.Join(baseDir, relativePath)
 }
